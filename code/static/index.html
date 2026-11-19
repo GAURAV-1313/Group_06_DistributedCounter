@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Distributed Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #F5F6F8;
+    --ink: #1D2433;
+    --muted: #7A8294;
+    --rule: #DCE0E6;
+    --empty: #E2E5EA;
+    --lost: #E5484D;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #15181E;
+      --ink: #E8EBF0;
+      --muted: #8A93A5;
+      --rule: #2A2F39;
+      --empty: #272C35;
+      --lost: #FF6369;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-optical-sizing: auto;
+    font-size: 17px;
+    line-height: 1.5;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 72px 24px 48px; }
+
+  /* Header + control */
+  header {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 32px; margin-bottom: 48px;
+  }
+  h1 {
+    margin: 0 0 12px; font-size: 48px; line-height: 1.02; font-weight: 600;
+    letter-spacing: -0.025em; text-wrap: balance;
+  }
+  .lede { margin: 0; max-width: 44ch; color: var(--muted); text-wrap: pretty; }
+
+  .control { display: flex; align-items: center; gap: 16px; }
+  .control label { color: var(--muted); white-space: nowrap; }
+  .control input {
+    width: 4.2ch; padding: 4px 0; border: 0; border-bottom: 1.5px solid var(--rule);
+    background: transparent; color: var(--ink); font: inherit; font-size: 22px; font-weight: 600;
+    text-align: center; font-variant-numeric: tabular-nums; border-radius: 0;
+    -moz-appearance: textfield; appearance: textfield;
+    transition: border-color .15s ease-out;
+  }
+  .control input::-webkit-outer-spin-button,
+  .control input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .control input:focus { outline: none; border-bottom-color: var(--ink); }
+  .control button {
+    min-height: 44px; min-width: 9.5em; padding: 0 22px; border: 0; border-radius: 999px;
+    background: var(--ink); color: var(--ground); font: inherit; font-weight: 600; cursor: pointer;
+    transition-property: scale, opacity; transition-duration: .12s; transition-timing-function: ease-out;
+  }
+  .control button:active { scale: .96; }
+  .control button:disabled { opacity: .45; cursor: progress; }
+  .control button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+  .status { flex-basis: 100%; margin: -20px 0 0; color: var(--lost); min-height: 0; }
+  .status:empty { display: none; }
+
+  /* Comparison */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--rule); }
+  .side { padding: 32px 40px 0 0; min-width: 0; }
+  .side + .side { padding: 32px 0 0 40px; border-left: 1px solid var(--rule); }
+  h2 { margin: 0; font-size: 19px; font-weight: 600; }
+  .endpoint { margin: 2px 0 28px; color: var(--muted); font-size: 15px; }
+
+  .count {
+    margin: 0; font-size: 112px; line-height: .9; font-weight: 500; letter-spacing: -0.045em;
+    font-variant-numeric: tabular-nums;
+  }
+  .of { margin: 12px 0 0; color: var(--muted); }
+  .result { margin: 0 0 28px; font-weight: 600; min-height: 1.5em; }
+  .result.bad { color: var(--lost); }
+  .result.idle { color: var(--muted); font-weight: 400; }
+
+  .dots { display: grid; grid-template-columns: repeat(var(--cols, 20), 1fr); gap: var(--gap, 5px); }
+  .dot {
+    aspect-ratio: 1; border-radius: 50%; background: var(--empty);
+    transition-property: background-color, box-shadow; transition-duration: .18s; transition-timing-function: ease-out;
+  }
+  .dot.on { background: var(--ink); }
+  .dot.lost { background: transparent; box-shadow: inset 0 0 0 1.5px var(--lost); }
+
+  .note { margin: 24px 0 0; max-width: 42ch; color: var(--muted); font-size: 15px; text-wrap: pretty; }
+  .time { margin: 8px 0 0; font-size: 15px; font-variant-numeric: tabular-nums; min-height: 1.5em; }
+
+  footer {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+    margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--rule);
+    color: var(--muted); font-size: 14px;
+  }
+  .legend { display: flex; align-items: center; gap: 16px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+  .legend i.lost-key { background: transparent; box-shadow: inset 0 0 0 1.5px var(--lost); }
+
+  @media (max-width: 720px) {
+    main { padding-top: 40px; }
+    h1 { font-size: 38px; }
+    .control { flex-wrap: wrap; width: 100%; }
+    .control label { flex-basis: 100%; margin-bottom: -8px; }
+    .control button { flex: 1; }
+    .compare { grid-template-columns: 1fr; }
+    .side, .side + .side { padding: 28px 0 32px; border-left: 0; }
+    .side + .side { border-top: 1px solid var(--rule); }
+    .count { font-size: 88px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dot, .control button, .control input { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Distributed counter</h1>
+      <p class="lede">One burst of concurrent requests goes to two counters on the same server. The only difference between them is a lock.</p>
+    </div>
+    <div class="control">
+      <label for="n">Requests per counter</label>
+      <input id="n" type="number" inputmode="numeric" min="1" max="1000" value="200">
+      <button id="run" type="button">Send requests</button>
+    </div>
+    <p class="status" id="status" role="alert"></p>
+  </header>
+
+  <div class="compare">
+    <section class="side" data-mode="unsafe">
+      <h2>Without a lock</h2>
+      <p class="endpoint">POST /increment/unsafe</p>
+      <p class="count" data-field="count">0</p>
+      <p class="of" data-field="of">of 200 requests counted</p>
+      <p class="result idle" data-field="result" aria-live="polite">Not run yet</p>
+      <div class="dots" data-field="dots" aria-hidden="true"></div>
+      <p class="time" data-field="time"></p>
+      <p class="note">Each request reads the counter, waits 5&nbsp;ms, then writes back value&nbsp;+&nbsp;1. Requests overlap, read the same old value, and overwrite each other.</p>
+    </section>
+
+    <section class="side" data-mode="safe">
+      <h2>With a lock</h2>
+      <p class="endpoint">POST /increment/safe</p>
+      <p class="count" data-field="count">0</p>
+      <p class="of" data-field="of">of 200 requests counted</p>
+      <p class="result idle" data-field="result" aria-live="polite">Not run yet</p>
+      <div class="dots" data-field="dots" aria-hidden="true"></div>
+      <p class="time" data-field="time"></p>
+      <p class="note">The same three steps, inside a lock. Requests take turns, so nothing is overwritten, but the burst takes longer.</p>
+    </section>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span>Each dot is one request</span>
+      <span><i></i>counted</span>
+      <span><i class="lost-key"></i>lost</span>
+    </div>
+    <span>Group 6, Distributed Systems</span>
+  </footer>
+</main>
+
+<script>
+  const MODES = ["unsafe", "safe"];
+  const MAX_REQUESTS = 1000;
+  const input = document.getElementById("n");
+  const runButton = document.getElementById("run");
+  const status = document.getElementById("status");
+
+  const sides = {};
+  for (const mode of MODES) {
+    const el = document.querySelector(`.side[data-mode="${mode}"]`);
+    const f = name => el.querySelector(`[data-field="${name}"]`);
+    sides[mode] = { count: f("count"), of: f("of"), result: f("result"), dots: f("dots"), time: f("time"), cells: [], done: false };
+  }
+
+  const requestCount = () => Math.max(1, Math.min(MAX_REQUESTS, parseInt(input.value, 10) || 200));
+
+  function buildGrids(n) {
+    const cols = n <= 200 ? 20 : n <= 500 ? 25 : 40;
+    for (const side of Object.values(sides)) {
+      side.dots.style.setProperty("--cols", cols);
+      side.dots.style.setProperty("--gap", cols > 25 ? "3px" : "5px");
+      side.cells = Array.from({ length: n }, () => {
+        const dot = document.createElement("span");
+        dot.className = "dot";
+        return dot;
+      });
+      side.dots.replaceChildren(...side.cells);
+      side.count.textContent = "0";
+      side.of.textContent = `of ${n} requests counted`;
+      side.result.className = "result idle";
+      side.result.textContent = "Not run yet";
+      side.time.textContent = "";
+    }
+  }
+
+  function paint(side, counted) {
+    const shown = Math.max(0, Math.min(side.cells.length, counted));
+    side.cells.forEach((dot, i) => dot.classList.toggle("on", i < shown));
+    side.count.textContent = shown;
+  }
+
+  function finish(side, counted, n, seconds) {
+    paint(side, counted);
+    side.cells.forEach((dot, i) => dot.classList.toggle("lost", i >= counted));
+    const lost = n - counted;
+    side.result.className = lost > 0 ? "result bad" : "result";
+    side.result.textContent = lost > 0
+      ? `${lost} updates lost (${Math.round(100 * lost / n)}%)`
+      : "No updates lost";
+    side.time.textContent = `Finished in ${seconds.toFixed(2)} s`;
+    side.done = true;
+  }
+
+  async function getCounters() {
+    const response = await fetch("/counter");
+    if (!response.ok) throw new Error("counter");
+    return response.json();
+  }
+
+  // Each response carries the value that request wrote, so the grid fills live
+  // as answers come back (the latest write is what the counter now holds).
+  async function sendOne(mode, before) {
+    const response = await fetch(`/increment/${mode}`, { method: "POST" });
+    if (!response.ok) throw new Error("increment");
+    const { value } = await response.json();
+    const side = sides[mode];
+    if (!side.done) paint(side, value - before[mode]);
+  }
+
+  async function sendBurst(mode, n, before) {
+    const start = performance.now();
+    await Promise.all(Array.from({ length: n }, () => sendOne(mode, before)));
+    const seconds = (performance.now() - start) / 1000;
+    const after = (await getCounters())[mode];
+    finish(sides[mode], after - before[mode], n, seconds);
+  }
+
+  async function run() {
+    const n = requestCount();
+    input.value = n;
+    status.textContent = "";
+    runButton.disabled = true;
+    runButton.textContent = "Sending...";
+    buildGrids(n);
+    for (const mode of MODES) {
+      sides[mode].done = false;
+      sides[mode].result.textContent = `Sending ${n} requests`;
+    }
+
+    try {
+      const before = await getCounters();
+      await Promise.all(MODES.map(mode => sendBurst(mode, n, before)));
+    } catch (e) {
+      status.textContent = "Can't reach the server. Start it with: uvicorn app:app --port 8000, then send again.";
+      buildGrids(n);
+    } finally {
+      runButton.disabled = false;
+      runButton.textContent = "Send requests";
+    }
+  }
+
+  runButton.addEventListener("click", run);
+  input.addEventListener("keydown", e => { if (e.key === "Enter" && !runButton.disabled) run(); });
+  input.addEventListener("change", () => { if (!runButton.disabled) buildGrids(requestCount()); });
+
+  buildGrids(requestCount());
+</script>
+</body>
+</html>
