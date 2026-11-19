@@ -39,6 +39,9 @@ Group_06_DistributedCounter/
     load_test.py        fires concurrent requests, prints expected vs actual
     requirements.txt    Python dependencies
     static/index.html   side-by-side demo page
+    setup.sh            Linux: one-time setup (venv + dependencies)
+    run_server.sh       Linux: start the server
+    run_load_test.sh    Linux: run the load test
   README.md
   group_details.txt
   demo_video.mp4
@@ -51,7 +54,32 @@ Group_06_DistributedCounter/
 
 ## How to run on Ubuntu / Linux
 
-You need two terminals. Run everything from inside the `code/` folder.
+### Quick way: scripts (recommended)
+
+```bash
+git clone https://github.com/GAURAV-1313/Group_06_DistributedCounter.git
+cd Group_06_DistributedCounter/code
+chmod +x *.sh
+./setup.sh
+```
+
+`setup.sh` installs `python3-venv` with apt if it is missing (asks for your sudo password), creates `code/venv`, and installs the dependencies. You only run it once.
+
+**Terminal 1: start the server** (keep it running, Ctrl+C stops it)
+
+```bash
+./run_server.sh
+```
+
+**Terminal 2: run the load test** (from the same `code/` folder)
+
+```bash
+./run_load_test.sh
+```
+
+Options are passed through, for example `./run_load_test.sh -n 500 -c 200`. To use another port, run `PORT=9000 ./run_server.sh` and `./run_load_test.sh --url http://127.0.0.1:9000`.
+
+### Manual way: the same steps, one command at a time
 
 **Terminal 1: install and start the server**
 
